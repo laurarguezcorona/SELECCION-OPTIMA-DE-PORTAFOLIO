@@ -1,0 +1,165 @@
+---
+title: "Portafolio optimo"
+author: "Laura Rodriguez Corona"
+date: "2025-02-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("quantmod")
+
+```
+
+
+
+
+
+
+```{r}
+# Cargar librerías necesarias
+
+
+library(quantmod)
+#library(PerformanceAnalytics)
+#library(quadprog)
+```
+
+
+```{r}
+# Descargar datos de Yahoo Finance
+getSymbols("NAFTRACISHRS.MX", src="yahoo", from="2024-02-20", to="2025-02-20")
+getSymbols("SPY", src="yahoo", from="2024-02-20", to="2025-02-20")
+getSymbols("CETES28.MX", src="yahoo", from="2024-02-20", to="2025-02-20")
+```
+
+
+```{r}
+# Calcular retornos semanales
+returns_naftrac <- weeklyReturn(NAFTRACISHRS.MX$NAFTRACISHRS.MX.Close)
+returns_spy <- weeklyReturn(SPY$SPY.Close)
+returns_cetes <- weeklyReturn(CETES28.MX$CETES28.MX.Close)
+```
+
+
+```{r}
+# Combinar retornos en una matriz
+returns <- cbind(returns_naftrac, returns_spy)  # returns_cetes)
+colnames(returns) <- c("NAFTRAC", "SPY", "CETES")
+```
+
+
+```{r}
+# Calcular matriz de varianzas y covarianzas
+cov_matrix <- cov(returns)
+```
+
+
+```{r}
+# Función para calcular la frontera eficiente
+efficient_frontier <- function(returns, cov_matrix, n_portfolios=100) {
+  n_assets <- ncol(returns)
+  portfolio_returns <- numeric(n_portfolios)
+  portfolio_risks <- numeric(n_portfolios)
+  weights_list <- list()
+  
+  for (i in 1:n_portfolios) {
+    weights <- runif(n_assets)
+    weights <- weights / sum(weights)
+    portfolio_returns[i] <- sum(weights * colMeans(returns))
+    portfolio_risks[i] <- sqrt(t(weights) %*% cov_matrix %*% weights)
+    weights_list[[i]] <- weights
+  }
+  
+  return(list(returns=portfolio_returns, risks=portfolio_risks, weights=weights_list))
+}
+
+
+# Calcular la frontera eficiente
+frontier <- efficient_frontier(returns, cov_matrix)
+
+
+# Selección óptima del portafolio para un inversionista con A=4
+A <- 4
+optimal_portfolio <- function(returns, cov_matrix, A) {
+  n_assets <- ncol(returns)
+  Dmat <- 2 * cov_matrix
+  dvec <- rep(0, n_assets)
+  Amat <- cbind(rep(1, n_assets), colMeans(returns))
+  bvec <- c(1, mean(returns))
+  result <- solve.QP(Dmat, dvec, Amat, bvec, meq=2)
+  weights <- result$solution
+  return(weights)
+}
+```
+
+
+```{r}
+weights_optimal <- optimal_portfolio(returns, cov_matrix, A)
+```
+
+
+```{r}
+# Calcular VaR y CVaR
+calculate_var_cvar <- function(returns, weights, alpha=0.05) {
+  portfolio_returns <- returns %*% weights
+  var <- quantile(portfolio_returns, alpha)
+  cvar <- mean(portfolio_returns[portfolio_returns <= var])
+  return(list(VaR=var, CVaR=cvar))
+}
+```
+
+
+```{r}
+var_cvar_normal <- calculate_var_cvar(returns, weights_optimal, 0.05)
+var_cvar_t <- calculate_var_cvar(returns, weights_optimal, 0.02)
+```
+
+
+```{r}
+# Resultados
+results <- data.frame(
+  Method = c("Normal 95%", "Normal 98%", "t-Student 95%", "t-Student 98%"),
+  VaR = c(var_cvar_normal$VaR, var_cvar_t$VaR),
+  CVaR = c(var_cvar_normal$CVaR, var_cvar_t$CVaR)
+)
+```
+
+
+```{r}
+# Guardar resultados en un archivo
+write.csv(results, "results/var_cvar_results.csv", row.names=FALSE)
+```
+
+
+```{r}
+# Generar gráficos
+png("results/efficient_frontier.png")
+plot(frontier$risks, frontier$returns, main="Frontera Eficiente", xlab="Riesgo", ylab="Retorno")
+dev.off()
+
+```
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
